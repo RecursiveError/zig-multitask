@@ -78,9 +78,13 @@ pub fn Create_OS(pool_size: comptime_int) type {
 
         pub fn yield(self: *Self) void {
             cortex_m.disableInterrupts();
+            cortex_m._DSB();
+            cortex_m._ISB();
 
             const task_qtd = self.task_pool.readableLength();
-            self.task_pool.writeItem(corrent_task) catch unreachable;
+            if (corrent_task != self.idle_task) {
+                self.task_pool.writeItem(corrent_task) catch unreachable;
+            }
             var next = self.idle_task;
             for (0..task_qtd) |_| {
                 const task = self.task_pool.readItem().?;
@@ -100,10 +104,8 @@ pub fn Create_OS(pool_size: comptime_int) type {
                 self.task_pool.writeItem(task) catch unreachable;
             }
             next_Task = next;
-            cortex_m.enableInterrupts();
             cortex_m.SCB.ICSR.* |= 1 << 28;
-            cortex_m._DSB();
-            cortex_m._ISB();
+            cortex_m.enableInterrupts();
         }
 
         pub fn task_sleep(self: *Self, tick: u64) void {
@@ -182,6 +184,7 @@ pub fn syscall(comptime sys_id: u8, arg0: u32, arg1: u32, arg2: u32) usize {
 }
 
 pub export fn SVcall_IRQ() callconv(.C) void {
+    cortex_m.disableInterrupts();
     var stack: u32 = undefined;
     asm volatile (
         \\MRS %[stack], PSP
@@ -199,6 +202,7 @@ pub export fn SVcall_IRQ() callconv(.C) void {
         },
         else => {},
     }
+    cortex_m.enableInterrupts();
 }
 
 fn uart_transmite_byte(c: u8) void {

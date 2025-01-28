@@ -22,10 +22,13 @@ fn delay(time: u32) void {
     }
 }
 
-var t1_stack: [200]u32 = undefined;
+var t1_stack: [2000]u32 = undefined;
 fn task1() noreturn {
-    const msg = "Hello Task1\n";
+    var buffer: [25]u8 = undefined;
+    var tick: usize = 0;
     while (true) {
+        const msg = std.fmt.bufPrint(&buffer, "hello task1 {d}\n", .{tick}) catch unreachable;
+        //const msg = "hello task1\n";
         for (msg) |c| {
             GPIOC.ODR.ODR13 = 1;
             delay(15);
@@ -34,6 +37,7 @@ fn task1() noreturn {
             const ret = OS_base.syscall(0, @as(u8, c), 0, 0);
             std.mem.doNotOptimizeAway(ret);
         }
+        tick += 1;
         OS_inst.task_sleep(1000);
     }
 }
@@ -57,6 +61,7 @@ var idle_stack: [200]u32 = undefined;
 fn idle() noreturn {
     while (true) {
         OS_inst.yield();
+        delay(5);
     }
 }
 
@@ -135,9 +140,9 @@ fn uart_read_blocking(data: []u8, timeout: u64) usize {
 
 fn init_kernel() void {
     //Enable System Tick
-    cortex_m3.SCB.set_IRQPrio(15, 4);
-    cortex_m3.SCB.set_IRQPrio(14, 1);
-    cortex_m3.SCB.set_IRQPrio(11, 1);
+    cortex_m3.SCB.set_IRQPrio(15, 1);
+    cortex_m3.SCB.set_IRQPrio(14, 14);
+    cortex_m3.SCB.set_IRQPrio(11, 13);
     cortex_m3.SCB.enable_IRQ(15);
     cortex_m3.SCB.enable_IRQ(14);
     cortex_m3.SCB.enable_IRQ(11);
