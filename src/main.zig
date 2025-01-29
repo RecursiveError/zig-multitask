@@ -12,7 +12,7 @@ const UART = peripherals.USART1;
 
 //global time variable
 var millis: u64 = 0;
-var OS_inst: OS_base.Create_OS(4) = undefined;
+var OS_inst: OS_base.Create_OS(5) = undefined;
 
 fn delay(time: u32) void {
     const end = millis + time;
@@ -21,6 +21,20 @@ fn delay(time: u32) void {
         std.mem.doNotOptimizeAway(end); //keep "end" in memory
     }
 }
+
+const sys_print = struct {
+    fn write_bytes(_: void, byte: []const u8) anyerror!usize {
+        for (byte) |b| {
+            _ = OS_base.syscall(0, b, 0, 0);
+        }
+
+        return byte.len;
+    }
+    fn print(comptime fmt: []const u8, args: anytype) !void {
+        var write = std.io.GenericWriter(void, anyerror, write_bytes){ .context = {} };
+        try write.print(fmt, args);
+    }
+};
 
 fn task1() noreturn {
     var buffer: [25]u8 = undefined;
@@ -50,15 +64,12 @@ fn task2() noreturn {
             _ = OS_base.syscall(0, @as(u8, c), 0, 0);
         }
         OS_inst.task_sleep(2500);
-        OS_inst.create_task(task3, 500) catch continue;
+        OS_inst.create_task(task3, 2000) catch continue;
     }
 }
 
 fn task3() noreturn {
-    const msg = "hello task3\n";
-    for (msg) |c| {
-        _ = OS_base.syscall(0, @as(u8, c), 0, 0);
-    }
+    sys_print.print("hello task{d}\n", .{3}) catch {};
     OS_inst.exit();
 }
 
@@ -69,7 +80,7 @@ fn idle() noreturn {
     }
 }
 
-var buf: [15000]u8 = undefined;
+var buf: [16000]u8 = undefined;
 export fn main() noreturn {
     cortex_m3.disableInterrupts();
     init_gpio();
@@ -80,18 +91,15 @@ export fn main() noreturn {
     //var t2 = OS_base.Task.init(task2, &t2_stack);
 
     var fba = std.heap.FixedBufferAllocator.init(&buf);
-    OS_inst = OS_base.Create_OS(4).init(idle_t.create_task(), &millis, fba.allocator());
+    OS_inst = OS_base.Create_OS(5).init(idle_t.create_task(), &millis, fba.allocator());
 
     //OS_inst.add_task(t1.create_task()) catch unreachable;
     //OS_inst.add_task(t2.create_task()) catch unreachable;
-    OS_inst.create_task(task1, 2000) catch unreachable;
-    OS_inst.create_task(task2, 1024) catch unreachable;
+    OS_inst.create_task(task1, 1200) catch unreachable;
+    OS_inst.create_task(task2, 600) catch unreachable;
 
     cortex_m3.enableInterrupts();
     OS_inst.start_scheduler();
-    while (true) {
-        asm volatile ("wfe");
-    }
 }
 
 fn init_gpio() void {

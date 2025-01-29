@@ -78,22 +78,31 @@ pub fn Create_OS(pool_size: comptime_int) type {
             self.task_pool.writeItem(new_task.create_task()) catch unreachable;
         }
 
-        pub fn start_scheduler(self: *Self) void {
+        pub fn start_scheduler(self: *Self) noreturn {
             const stack_addr = self.idle_task.stack_pointer;
             corrent_task = self.idle_task;
+
+            //start PSP for thread mode
             asm volatile ("MSR CONTROL, %[value]"
                 :
                 : [value] "r" (2),
                 : "memory"
             );
+
+            //set PSP fpr the task addrs
             asm volatile ("MSR PSP, %[addr]"
                 :
                 : [addr] "r" (stack_addr),
                 : "memory"
             );
-            cortex_m.SCB.ICSR.* |= 1 << 28;
+
             cortex_m._ISB();
             cortex_m._DSB();
+            //call pendSVS_IRQ
+            cortex_m.SCB.ICSR.* |= 1 << 28;
+            while (true) {
+                asm volatile ("wfe");
+            }
         }
 
         pub fn yield(self: *Self) void {
@@ -159,6 +168,8 @@ pub export fn pendSV_IRQ() callconv(.C) void {
         boot = false;
         //bootstrap first Task
         const point = corrent_task.stack_pointer;
+
+        //just load current task
         asm volatile (
             \\MSR PSP, %[addr]
             \\MRS R0, PSP
@@ -170,6 +181,8 @@ pub export fn pendSV_IRQ() callconv(.C) void {
         );
     } else {
         var __temp: u32 = 0;
+
+        //save current_task context and update the task stack pointer
         asm volatile (
             \\MRS R0, PSP
             \\STMDB R0!, {R4-R11}
@@ -179,8 +192,9 @@ pub export fn pendSV_IRQ() callconv(.C) void {
             :
             : "PSP", "R0"
         );
-
         corrent_task.stack_pointer = @ptrFromInt(__temp);
+
+        //load next context task and return
         corrent_task = next_Task;
         const point = corrent_task.stack_pointer;
         asm volatile (
@@ -193,6 +207,7 @@ pub export fn pendSV_IRQ() callconv(.C) void {
             : "PSP", "R0"
         );
     }
+    //clear pendSV IRQ
     cortex_m.SCB.ICSR.* |= 1 << 27;
     cortex_m.enableInterrupts();
 }
@@ -217,8 +232,10 @@ pub fn syscall(comptime sys_id: u8, arg0: u32, arg1: u32, arg2: u32) usize {
 pub export fn SVcall_IRQ() callconv(.C) void {
     cortex_m.disableInterrupts();
     var stack: u32 = undefined;
+
+    //this code only uses syscalls from thread mode so no need to chech for MSP
     asm volatile (
-        \\MRS %[stack], PSP
+        \\MRS %[stack], PSP 
         : [stack] "=r" (stack),
     );
 
@@ -236,6 +253,7 @@ pub export fn SVcall_IRQ() callconv(.C) void {
     cortex_m.enableInterrupts();
 }
 
+//just a test for syscall
 fn uart_transmite_byte(c: u8) void {
     while (UART.SR.TC != 1) {}
     UART.DR.DR = @intCast(c);
