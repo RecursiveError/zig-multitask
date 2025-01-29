@@ -22,27 +22,23 @@ fn delay(time: u32) void {
     }
 }
 
-var t1_stack: [2000]u32 = undefined;
 fn task1() noreturn {
     var buffer: [25]u8 = undefined;
     var tick: usize = 0;
     while (true) {
         const msg = std.fmt.bufPrint(&buffer, "hello task1 {d}\n", .{tick}) catch unreachable;
-        //const msg = "hello task1\n";
         for (msg) |c| {
             GPIOC.ODR.ODR13 = 1;
             delay(15);
             GPIOC.ODR.ODR13 = 0;
             delay(15);
-            const ret = OS_base.syscall(0, @as(u8, c), 0, 0);
-            std.mem.doNotOptimizeAway(ret);
+            _ = OS_base.syscall(0, @as(u8, c), 0, 0);
         }
         tick += 1;
-        OS_inst.task_sleep(1000);
+        OS_inst.task_sleep(500);
     }
 }
 
-var t2_stack: [200]u32 = undefined;
 fn task2() noreturn {
     const msg = "Hello Task2\n";
     while (true) {
@@ -53,30 +49,44 @@ fn task2() noreturn {
             delay(15);
             _ = OS_base.syscall(0, @as(u8, c), 0, 0);
         }
-        OS_inst.task_sleep(200);
+        OS_inst.task_sleep(2500);
+        OS_inst.create_task(task3, 500) catch continue;
     }
+}
+
+fn task3() noreturn {
+    const msg = "hello task3\n";
+    for (msg) |c| {
+        _ = OS_base.syscall(0, @as(u8, c), 0, 0);
+    }
+    OS_inst.exit();
 }
 
 var idle_stack: [200]u32 = undefined;
 fn idle() noreturn {
     while (true) {
         OS_inst.yield();
-        delay(5);
     }
 }
 
+var buf: [15000]u8 = undefined;
 export fn main() noreturn {
     cortex_m3.disableInterrupts();
     init_gpio();
     init_kernel();
     init_UART();
     var idle_t = OS_base.Task.init(idle, &idle_stack);
-    var t1 = OS_base.Task.init(task1, &t1_stack);
-    var t2 = OS_base.Task.init(task2, &t2_stack);
-    OS_inst = OS_base.Create_OS(4).init(idle_t.create_task(), &millis);
+    //var t1 = OS_base.Task.init(task1, &t1_stack);
+    //var t2 = OS_base.Task.init(task2, &t2_stack);
 
-    OS_inst.add_task(t1.create_task()) catch unreachable;
-    OS_inst.add_task(t2.create_task()) catch unreachable;
+    var fba = std.heap.FixedBufferAllocator.init(&buf);
+    OS_inst = OS_base.Create_OS(4).init(idle_t.create_task(), &millis, fba.allocator());
+
+    //OS_inst.add_task(t1.create_task()) catch unreachable;
+    //OS_inst.add_task(t2.create_task()) catch unreachable;
+    OS_inst.create_task(task1, 2000) catch unreachable;
+    OS_inst.create_task(task2, 1024) catch unreachable;
+
     cortex_m3.enableInterrupts();
     OS_inst.start_scheduler();
     while (true) {

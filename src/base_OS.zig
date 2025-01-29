@@ -1,4 +1,5 @@
 const std = @import("std");
+const alloc = std.mem.Allocator;
 const cortex_m = @import("cortexm3.zig");
 const stm32f1xx = @import("stm32f1xx.zig");
 
@@ -8,6 +9,7 @@ const TaskCallBack = *const fn () noreturn;
 
 pub const TaskState = union(enum) {
     active: void,
+    delete: void,
     sleep: u64,
 };
 pub const Task = struct {
@@ -49,13 +51,31 @@ pub fn Create_OS(pool_size: comptime_int) type {
         task_pool: std.fifo.LinearFifo(*Task, .{ .Static = pool_size }),
         idle_task: *Task,
         tick_var: *u64,
+        OS_mem: alloc,
 
-        pub fn init(idle: *Task, tick: *u64) @This() {
+        pub fn init(
+            idle: *Task,
+            tick: *u64,
+            mem: alloc,
+        ) @This() {
             return .{
                 .task_pool = std.fifo.LinearFifo(*Task, .{ .Static = pool_size }).init(),
                 .idle_task = idle,
                 .tick_var = tick,
+                .OS_mem = mem,
             };
+        }
+
+        pub fn create_task(self: *Self, task_fn: TaskCallBack, stack_mem: usize) !void {
+            if (self.task_pool.writableLength() < 2) return error.TaskPoolFull;
+            var new_task: *Task = try self.OS_mem.create(Task);
+            new_task.stack = self.OS_mem.alloc(u32, stack_mem) catch |err| {
+                self.OS_mem.destroy(new_task);
+                return err;
+            };
+            new_task.Task_fn = task_fn;
+            new_task.state = .{ .active = {} };
+            self.task_pool.writeItem(new_task.create_task()) catch unreachable;
         }
 
         pub fn start_scheduler(self: *Self) void {
@@ -100,6 +120,11 @@ pub fn Create_OS(pool_size: comptime_int) type {
                             break;
                         }
                     },
+                    .delete => {
+                        self.OS_mem.free(task.stack);
+                        self.OS_mem.destroy(task);
+                        continue;
+                    },
                 }
                 self.task_pool.writeItem(task) catch unreachable;
             }
@@ -112,6 +137,12 @@ pub fn Create_OS(pool_size: comptime_int) type {
             const daedline = self.tick_var.* + tick;
             corrent_task.state = .{ .sleep = daedline };
             self.yield();
+        }
+
+        pub fn exit(self: *Self) noreturn {
+            corrent_task.state = .{ .delete = {} }; //just mark task for delete, task will be delete in next yield run
+            self.yield();
+            while (true) {}
         }
 
         pub fn add_task(self: *Self, task: *Task) !void {
