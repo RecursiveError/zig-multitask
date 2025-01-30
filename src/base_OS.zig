@@ -9,6 +9,7 @@ const TaskCallBack = *const fn () noreturn;
 
 pub const TaskState = union(enum) {
     active: void,
+    @"suspend": void,
     delete: void,
     sleep: u64,
 };
@@ -66,7 +67,7 @@ pub fn Create_OS(pool_size: comptime_int) type {
             };
         }
 
-        pub fn create_task(self: *Self, task_fn: TaskCallBack, stack_mem: usize) !void {
+        pub fn create_task(self: *Self, task_fn: TaskCallBack, stack_mem: usize) !*Task {
             if (self.task_pool.writableLength() < 2) return error.TaskPoolFull;
             var new_task: *Task = try self.OS_mem.create(Task);
             new_task.stack = self.OS_mem.alloc(u32, stack_mem) catch |err| {
@@ -76,6 +77,7 @@ pub fn Create_OS(pool_size: comptime_int) type {
             new_task.Task_fn = task_fn;
             new_task.state = .{ .active = {} };
             self.task_pool.writeItem(new_task.create_task()) catch unreachable;
+            return new_task;
         }
 
         pub fn start_scheduler(self: *Self) noreturn {
@@ -107,8 +109,6 @@ pub fn Create_OS(pool_size: comptime_int) type {
 
         pub fn yield(self: *Self) void {
             cortex_m.disableInterrupts();
-            cortex_m._DSB();
-            cortex_m._ISB();
 
             const task_qtd = self.task_pool.readableLength();
             if (corrent_task != self.idle_task) {
@@ -134,12 +134,15 @@ pub fn Create_OS(pool_size: comptime_int) type {
                         self.OS_mem.destroy(task);
                         continue;
                     },
+                    else => {},
                 }
                 self.task_pool.writeItem(task) catch unreachable;
             }
             next_Task = next;
             cortex_m.SCB.ICSR.* |= 1 << 28;
             cortex_m.enableInterrupts();
+            cortex_m._ISB();
+            cortex_m._DSB();
         }
 
         pub fn task_sleep(self: *Self, tick: u64) void {
@@ -152,6 +155,22 @@ pub fn Create_OS(pool_size: comptime_int) type {
             corrent_task.state = .{ .delete = {} }; //just mark task for delete, task will be delete in next yield run
             self.yield();
             while (true) {}
+        }
+
+        pub fn suspend_task(self: *Self) void {
+            corrent_task.state = .{ .@"suspend" = {} };
+            self.yield();
+        }
+
+        pub fn resume_task(self: *Self, ts: *Task) void {
+            const read_size = self.task_pool.readableLength();
+            for (0..read_size) |_| {
+                const task = self.task_pool.readItem().?;
+                if (task == ts) {
+                    ts.state = .{ .active = {} };
+                }
+                self.task_pool.writeItem(task) catch unreachable;
+            }
         }
 
         pub fn add_task(self: *Self, task: *Task) !void {

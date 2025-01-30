@@ -36,6 +36,7 @@ const sys_print = struct {
     }
 };
 
+var t1_handler: *OS_base.Task = undefined;
 fn task1() noreturn {
     var buffer: [25]u8 = undefined;
     var tick: usize = 0;
@@ -53,6 +54,7 @@ fn task1() noreturn {
     }
 }
 
+var t2_handler: *OS_base.Task = undefined;
 fn task2() noreturn {
     const msg = "Hello Task2\n";
     while (true) {
@@ -64,7 +66,7 @@ fn task2() noreturn {
             _ = OS_base.syscall(0, @as(u8, c), 0, 0);
         }
         OS_inst.task_sleep(2500);
-        OS_inst.create_task(task3, 2000) catch continue;
+        _ = OS_inst.create_task(task3, 2000) catch continue;
     }
 }
 
@@ -87,16 +89,12 @@ export fn main() noreturn {
     init_kernel();
     init_UART();
     var idle_t = OS_base.Task.init(idle, &idle_stack);
-    //var t1 = OS_base.Task.init(task1, &t1_stack);
-    //var t2 = OS_base.Task.init(task2, &t2_stack);
 
     var fba = std.heap.FixedBufferAllocator.init(&buf);
     OS_inst = OS_base.Create_OS(5).init(idle_t.create_task(), &millis, fba.allocator());
 
-    //OS_inst.add_task(t1.create_task()) catch unreachable;
-    //OS_inst.add_task(t2.create_task()) catch unreachable;
-    OS_inst.create_task(task1, 1200) catch unreachable;
-    OS_inst.create_task(task2, 600) catch unreachable;
+    t1_handler = OS_inst.create_task(task1, 1200) catch unreachable;
+    t2_handler = OS_inst.create_task(task2, 600) catch unreachable;
 
     cortex_m3.enableInterrupts();
     OS_inst.start_scheduler();
