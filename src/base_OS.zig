@@ -98,10 +98,10 @@ pub fn Create_OS(pool_size: comptime_int) type {
                 : "memory"
             );
 
-            cortex_m._ISB();
-            cortex_m._DSB();
             //call pendSVS_IRQ
             cortex_m.SCB.ICSR.* |= 1 << 28;
+            cortex_m._ISB();
+            cortex_m._DSB();
             while (true) {
                 asm volatile ("wfe");
             }
@@ -173,7 +173,7 @@ pub fn Create_OS(pool_size: comptime_int) type {
             }
         }
 
-        pub fn add_task(self: *Self, task: *Task) !void {
+        fn add_task(self: *Self, task: *Task) !void {
             if (self.task_pool.writableLength() < 2) return error.TaskPoolFull;
             self.task_pool.writeItem(task) catch unreachable;
         }
