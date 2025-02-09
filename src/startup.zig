@@ -130,27 +130,27 @@ const vector_table: VectorTable = .{
 };
 
 comptime {
-    @export(vector_table, .{
+    @export(&vector_table, .{
         .name = "vector_table",
         .section = ".isr_vector",
         .linkage = .strong,
     });
 
-    @export(resetHandler, .{
+    @export(&resetHandler, .{
         .name = "_start",
     });
 
-    @export(SystemTick_IRQ, .{
+    @export(&SystemTick_IRQ, .{
         .name = "SystemTick_IRQ",
         .linkage = .weak,
     });
 
-    @export(SVcall_IRQ, .{
+    @export(&SVcall_IRQ, .{
         .name = "SVcall_IRQ",
         .linkage = .weak,
     });
 
-    @export(pendSV_IRQ, .{
+    @export(&pendSV_IRQ, .{
         .name = "pendSV_IRQ",
         .linkage = .weak,
     });

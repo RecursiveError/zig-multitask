@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
         .cpu_arch = .thumb,
         .os_tag = .freestanding,
         .abi = .none,
-        .cpu_model = std.zig.CrossTarget.CpuModel{ .explicit = &std.Target.arm.cpu.cortex_m3 },
+        .cpu_model = .{ .explicit = &std.Target.arm.cpu.cortex_m3 },
         //.cpu_features_add = std.Target.arm.featureSet(&[_]std.Target.arm.Feature{std.Target.arm.Feature.v7m}),
     });
     const executable_name = "base_OS";
@@ -34,7 +34,7 @@ pub fn build(b: *std.Build) void {
     );
     startup.entry = .disabled;
 
-    base_OS.setLinkerScriptPath(b.path("stmf103.ld"));
+    base_OS.setLinkerScript(b.path("stmf103.ld"));
     base_OS.link_gc_sections = true;
     base_OS.link_data_sections = true;
     base_OS.link_function_sections = true;
