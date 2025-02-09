@@ -264,7 +264,7 @@ pub export fn SVcall_IRQ() callconv(.C) void {
 
     switch (num[0]) {
         0 => {
-            uart_transmite_byte(@intCast(r0));
+            semihost(@intCast(r0));
             stackP[0] = 0;
         },
         else => {},
@@ -272,17 +272,13 @@ pub export fn SVcall_IRQ() callconv(.C) void {
     cortex_m.enableInterrupts();
 }
 
-//just a test for syscall
-fn uart_transmite_byte(c: u8) void {
-    while (UART.SR.TC != 1) {}
-    UART.DR.DR = @intCast(c);
-    while (UART.SR.TXE != 1) {}
-}
-
-fn uart_transmite_blocking(data: []const u8) void {
-    for (data) |c| {
-        while (UART.SR.TC != 1) {}
-        UART.DR.DR = @intCast(c);
-        while (UART.SR.TXE != 1) {}
-    }
+fn semihost(c: u8) callconv(.AAPCS) void {
+    asm volatile (
+        \\mov r1, %[char]
+        \\mov r0, #0x03
+        \\BKPT #0xAB
+        :
+        : [char] "r" (&c),
+        : "memory", "r0", "r1"
+    );
 }

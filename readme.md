@@ -1,5 +1,6 @@
 a simple example of a multitasking system for ARM Cortex-M3 made in Zig for SMT32F103
 
+Zig: v0.14.0
 
 This example contains:
 
